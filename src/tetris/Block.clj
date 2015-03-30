@@ -1,8 +1,10 @@
 (ns tetris.Block
   (:use clojure.string)
   (:gen-class
+   :name tetris.Block
    :state state
    :init init
+   :main false
    :prefix "block-"
    :constructors {[clojure.lang.PersistentVector] []}
    :methods [[rows [] long]
