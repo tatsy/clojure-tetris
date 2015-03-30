@@ -41,31 +41,29 @@
                     [0 0 0 0]
                     [0 0 0 0]]))
 
-(def square (Block. [[1 1]
-                     [1 1]]))
+(def square (Block. [[2 2]
+                     [2 2]]))
 
 (def tblock (Block. [[0 0 0]
-                     [1 1 1]
-                     [0 1 0]]))
+                     [3 3 3]
+                     [0 3 0]]))
 
-(def sblock (Block. [[0 1 0]
-                     [0 1 1]
-                     [0 0 1]]))
+(def sblock (Block. [[0 4 0]
+                     [0 4 4]
+                     [0 0 4]]))
 
-(def zblock (Block. [[0 1 0]
-                     [1 1 0]
-                     [1 0 0]]))
+(def zblock (Block. [[0 5 0]
+                     [5 5 0]
+                     [5 0 0]]))
 
-(def lblock (Block. [[1 1 0]
-                     [0 1 0]
-                     [0 1 0]]))
+(def lblock (Block. [[6 6 0]
+                     [0 6 0]
+                     [0 6 0]]))
 
-(def jblock (Block. [[0 1 1]
-                     [0 1 0]
-                     [0 1 0]]))
+(def jblock (Block. [[0 7 7]
+                     [0 7 0]
+                     [0 7 0]]))
 
-(def block-x (atom 0))
-(def block-y (atom 0))
 (def blocks [stick square tblock sblock zblock lblock jblock])
 (def block-colors [Color/WHITE
                    Color/CYAN
@@ -80,9 +78,7 @@
 
 ;; get paint color
 (defn get-color [id]
-  (cond
-    (= id empty-cell) (Color/WHITE)
-    (= id filled-cell) (Color/RED)))
+  (block-colors id))
 
 ;; paint field
 (defn paint-field [g field]
@@ -102,8 +98,10 @@
         blk-cols (.cols @active-block)]
     (doseq [i (range blk-rows)
             j (range blk-cols)]
-      (let [bx (* (+ @block-x i) cell-size)
-            by (* (+ @block-y j) cell-size)
+      (let [blk-x (.getX @active-block)
+            blk-y (.getY @active-block)
+            bx (* (+ blk-x i) cell-size)
+            by (* (+ blk-y j) cell-size)
             id (.get @active-block i j)]
         (when (not= id 0)
           (.setColor g (get-color (.get @active-block i j)))
@@ -111,16 +109,32 @@
 
 ;; move down block
 ;; if impossible return false
-(defn move-down-block []
-  true)
+(defn move-block [move-func]
+  (swap! active-block move-func)
+  (let [next-x (.getX @active-block)
+        next-y (.getY @active-block)
+        blk-rows (.rows @active-block)
+        blk-cols (.cols @active-block)
+        flags (for [i (range blk-rows)
+                    j (range blk-cols)
+                    :let [bx (+ j next-x)
+                          by (+ i next-y)]] (or (zero? (.get @active-block i j))
+                                                (zero? (get-in @field [by bx]))))
+        result (every? true? flags)]
+    ;;(when result
+    ;;  (reset! block-x next-x)
+    ;;  (reset! block-y next-y))
+    (println "moved")
+    result))
 
 (defn fix-block [])
 
 ;; proceed game step
 (defn proceed-game []
-  (when (not (move-down-block))
+  (when (not (move-block #(.move % 0 1)))
     (fix-block)
-    (reset! active-block (blocks (rand-int (count blocks))))))
+    (reset! active-block (blocks (rand-int (count blocks)))))
+  true)
 
 ;; extends JPanel implements KeyListener
 (defn create-game-panel []
@@ -131,11 +145,11 @@
     (keyPressed [e]
       (let [keycode (.getKeyCode e)]
         (do (cond
-              (= keycode VK_LEFT) (println "Left")
-              (= keycode VK_RIGHT) (println "Right")
-              (= keycode VK_DOWN) (println "Down")
-              (= keycode VK_UP) (println "Up")
-              (= keycode VK_SPACE) (println "Space")))))
+              (= keycode VK_LEFT)  (move-block #(.move % -1 0))
+              (= keycode VK_RIGHT) (move-block #(.move % 1 0))
+              (= keycode VK_DOWN)  (move-block #(.move % 0 0))
+              (= keycode VK_UP)    (move-block #(.move % 0 0))
+              (= keycode VK_SPACE) (move-block #(.rotate %))))))
     (getPreferredSize []
       (Dimension. (* field-cols cell-size)
                   (* field-rows cell-size)))
