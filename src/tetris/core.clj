@@ -222,7 +222,7 @@
               (= keycode VK_LEFT)  (move-block #(.move % -1 0))
               (= keycode VK_RIGHT) (move-block #(.move %  1 0))
               (= keycode VK_DOWN)  (move-down-block)
-              (= keycode VK_UP)    (move-block #(.move % 64 0))
+              (= keycode VK_UP)    (move-block #(.move %  0 0))
               (= keycode VK_SPACE) (move-block #(.rotate %))))))
     (getPreferredSize []
       (Dimension. (* field-cols cell-size)
