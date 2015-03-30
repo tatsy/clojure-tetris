@@ -12,6 +12,7 @@
              [getX [] long]
              [getY [] long]
              [get [long long] long]
+             [copy [] tetris.Block]
              [move [long long] tetris.Block]
              [rotate [] tetris.Block]]))
 
@@ -25,6 +26,15 @@
          :rows (count pattern)
          :cols (count (pattern 0))
          :pattern (atom pattern)}]))
+
+(defn block-copy [this]
+  (let [ret (tetris.Block. @((.state this) :pattern))
+        fields (.state ret)
+        atom-x (fields :x)
+        atom-y (fields :y)]
+    (reset! atom-x (.getX this))
+    (reset! atom-y (.getY this))
+    ret))
 
 (defn block-rows [this]
   ((.state this) :rows))
