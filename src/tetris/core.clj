@@ -64,7 +64,19 @@
                      [0 1 0]
                      [0 1 0]]))
 
+(def block-x (atom 0))
+(def block-y (atom 0))
 (def blocks [stick square tblock sblock zblock lblock jblock])
+(def block-colors [Color/WHITE
+                   Color/CYAN
+                   Color/YELLOW
+                   Color/GREEN
+                   Color/RED
+                   Color/BLUE
+                   Color/ORANGE
+                   Color/MAGENTA])
+
+(def active-block (atom (blocks (rand-int (count blocks)))))
 
 ;; get paint color
 (defn get-color [id]
@@ -74,6 +86,7 @@
 
 ;; paint field
 (defn paint-field [g field]
+  ;; paint fixed blocks
   (doseq [i (range field-rows)
           j (range field-cols)]
     (let [bx (* j cell-size)
@@ -83,7 +96,31 @@
       (.fillRect g bx by cell-size cell-size)
       ;; fill block border
       (.setColor g border-color)
-      (.drawRect g bx by cell-size cell-size))))
+      (.drawRect g bx by cell-size cell-size)))
+  ;; paint active block
+  (let [blk-rows (.rows @active-block)
+        blk-cols (.cols @active-block)]
+    (doseq [i (range blk-rows)
+            j (range blk-cols)]
+      (let [bx (* (+ @block-x i) cell-size)
+            by (* (+ @block-y j) cell-size)
+            id (.get @active-block i j)]
+        (when (not= id 0)
+          (.setColor g (get-color (.get @active-block i j)))
+          (.fillRect g bx by cell-size cell-size))))))
+
+;; move down block
+;; if impossible return false
+(defn move-down-block []
+  true)
+
+(defn fix-block [])
+
+;; proceed game step
+(defn proceed-game []
+  (when (not (move-down-block))
+    (fix-block)
+    (reset! active-block (blocks (rand-int (count blocks))))))
 
 ;; extends JPanel implements KeyListener
 (defn create-game-panel []
@@ -124,12 +161,13 @@
 
     ;; game loop
     (loop []
-      (when @game-active)
+      (if (proceed-game)
         (do
           (.repaint gamepanel)
           (Thread/sleep time-interval)
           (println "game moving")
-          (recur)))))
+          (recur))
+        (println "You lose!!")))))
 
 ;; main
 (defn -main [& args]
