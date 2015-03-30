@@ -19,18 +19,17 @@
 (def field-rows 20)
 (def field-cols 10)
 (def cell-size 20)
+(def block-margin 3)
 
 ;; game parameters
-(def time-interval 100)
+(def time-interval 500)
+(def score-table [0 10 30 70 100])
 
 ;; game state
 (def game-active (atom true))
+(def game-score  (atom 0))
 
-;; field IDs
-(def empty-cell 0)
-(def filled-cell 1)
-
-(def field (to-array-2d (make-vec-2d field-rows field-cols :value empty-cell)))
+(def field (atom (to-array-2d (make-vec-2d field-rows field-cols :value 0))))
 
 ;; field colors
 (def border-color Color/GRAY)
@@ -66,33 +65,45 @@
 
 (def blocks [stick square tblock sblock zblock lblock jblock])
 (def block-colors [Color/WHITE
-                   Color/CYAN
-                   Color/YELLOW
-                   Color/GREEN
-                   Color/RED
-                   Color/BLUE
-                   Color/ORANGE
-                   Color/MAGENTA])
+                   (Color.  64 216 216)   ;; cyan
+                   (Color. 216 216  64)   ;; yellow
+                   (Color.  64 216  64)   ;; green
+                   (Color. 216  64  64)   ;; red
+                   (Color.  64  64 216)   ;; blue
+                   (Color. 216 128  32)   ;; orange
+                   (Color. 216  64 216)]) ;; magenta
 
 (def active-block (atom (Block. (blocks (rand-int (count blocks))))))
+(def next-block   (atom (Block. (blocks (rand-int (count blocks))))))
 
 ;; get paint color
 (defn get-color [id]
   (block-colors id))
 
+;; paint single block
+(defn paint-single-block [g color bx by width height]
+  (.setColor g color)
+  (.fillRect g bx by width height)
+  (when (not= color Color/WHITE)
+    (.setColor g (.brighter color))
+    (.fillRect g bx by block-margin height)
+    (.fillRect g bx by width block-margin)
+    (.setColor g (.darker color))
+    (.fillRect g (+ bx (- cell-size block-margin)) by block-margin height)
+    (.fillRect g bx (+ by (- cell-size block-margin)) width block-margin)))
+
 ;; paint field
 (defn paint-field [g field]
+  (.setColor g Color/WHITE)
+  (.fillRect g 0 0 (* field-cols cell-size) (* field-rows cell-size))
   ;; paint fixed blocks
   (doseq [i (range field-rows)
           j (range field-cols)]
     (let [bx (* j cell-size)
-          by (* i cell-size)]
+          by (* i cell-size)
+          color (get-color (aget field i j))]
       ;; fill block
-      (.setColor g (get-color (aget field i j)))
-      (.fillRect g bx by cell-size cell-size)
-      ;; fill block border
-      (.setColor g border-color)
-      (.drawRect g bx by cell-size cell-size)))
+      (paint-single-block g color bx by cell-size cell-size)))
   ;; paint active block
   (let [blk-rows (.rows @active-block)
         blk-cols (.cols @active-block)]
@@ -102,11 +113,25 @@
             blk-y (.getY @active-block)
             bx (* (+ blk-x j) cell-size)
             by (* (+ blk-y i) cell-size)
+            color (get-color (.get @active-block i j))
             id (.get @active-block i j)]
         (when (not= id 0)
-          (.setColor g (get-color (.get @active-block i j)))
-          (.fillRect g bx by cell-size cell-size))))))
+          (paint-single-block g color bx by cell-size cell-size))))))
 
+;; paint next block
+(defn paint-next-block [g blk]
+  (.setColor g Color/WHITE)
+  (.fillRect g 0 0 (* 4 cell-size) (* 4 cell-size))
+  (let [rows (.rows blk)
+        cols (.cols blk)]
+    (doseq [i (range rows)
+            j (range cols)]
+      (let [bx (* j cell-size)
+            by (* i cell-size)
+            color (get-color (.get blk i j))]
+        (paint-single-block g color bx by cell-size cell-size)))))
+
+;; check the block can be placed for current field
 (defn placable? [field block]
   (let [blk-x (.getX block)
         blk-y (.getY block)
@@ -128,10 +153,14 @@
 (defn move-block [move-func]
   (def copied-block (.copy @active-block))
   (swap! active-block move-func)
-  (let [result (placable? field @active-block)]
+  (let [result (placable? @field @active-block)]
     (when (false? result)
       (reset! active-block copied-block))
     result))
+
+;; move down block while it can be moved
+(defn move-down-block []
+  (while (move-block #(.move % 0 1))))
 
 (defn fix-block []
   (let [blk-x (.getX @active-block)
@@ -142,30 +171,58 @@
             j (range blk-cols)]
       (let [el (.get @active-block i j)]
         (when (not= el 0)
-          (aset field (+ i blk-y) (+ j blk-x) el))))))
+          (aset @field (+ i blk-y) (+ j blk-x) el))))))
+
+(defn line-filled? [line]
+  (every? nonzero? line))
+
+;; process filled lines
+(defn process-filled-lines []
+  (let [unfilled-lines (for [i (range field-rows)
+                             :when (not (line-filled? (aget @field i)))] i)
+        filled-line-count (- field-rows (count unfilled-lines))]
+    ;; update score
+    (reset! game-score (+ @game-score (score-table filled-line-count)))
+    ;; remove filled lines
+    (when (nonzero? filled-line-count)
+      (reset! field (to-array-2d (concat (make-vec-2d filled-line-count field-cols)
+                                         (for [l unfilled-lines] (aget @field l))))))))
 
 ;; proceed game step
 (defn proceed-game []
   (if (not (move-block #(.move % 0 1)))
     (do
       (fix-block)
-      (reset! active-block (Block. (blocks (rand-int (count blocks)))))
-      (placable? field @active-block))
+      (process-filled-lines)
+      (reset! active-block @next-block)
+      (reset! next-block (Block. (blocks (rand-int (count blocks)))))
+      (placable? @field @active-block))
     true))
+
+;; next block panel
+(defn create-next-panel []
+  (proxy [JPanel] []
+    (paintComponent [g]
+      (proxy-super paintComponent g)
+      (paint-next-block g @next-block))
+    (getPreferredSize []
+      (Dimension. (* 4 cell-size)
+                  (* 4 cell-size)))))
+
 
 ;; extends JPanel implements KeyListener
 (defn create-game-panel []
   (proxy [JPanel KeyListener] []
     (paintComponent [g]
       (proxy-super paintComponent g)
-      (paint-field g field))
+      (paint-field g @field))
     (keyPressed [e]
       (let [keycode (.getKeyCode e)]
         (do (cond
               (= keycode VK_LEFT)  (move-block #(.move % -1 0))
-              (= keycode VK_RIGHT) (move-block #(.move % 1 0))
-              (= keycode VK_DOWN)  (move-block #(.move % 0 0))
-              (= keycode VK_UP)    (move-block #(.move % 0 0))
+              (= keycode VK_RIGHT) (move-block #(.move %  1 0))
+              (= keycode VK_DOWN)  (move-down-block)
+              (= keycode VK_UP)    (move-block #(.move % 64 0))
               (= keycode VK_SPACE) (move-block #(.rotate %))))))
     (getPreferredSize []
       (Dimension. (* field-cols cell-size)
@@ -177,10 +234,16 @@
 (defn game-main []
   ;; init game field
   (let [frame (JFrame. "TETRIS")
-        gamepanel (create-game-panel)]
+        gamepanel (create-game-panel)
+        sidepanel (JPanel.)
+        scorelabel (JLabel. "Score: @")
+        nextpanel (create-next-panel)]
     (deflayout
       frame (:border)
-      {:WEST gamepanel})
+      {:WEST gamepanel
+       :EAST (deflayout (JPanel.) (:border)
+               {:NORTH (deflayout sidepanel (:flow :TRAILING)
+                         [nextpanel scorelabel])})})
     (doto gamepanel
       (.setFocusable true)
       (.addKeyListener gamepanel)
@@ -195,9 +258,11 @@
       (if (proceed-game)
         (do
           (.repaint gamepanel)
+          (.repaint nextpanel)
+          (.setText scorelabel (format "Score: %d" @game-score))
           (Thread/sleep time-interval)
           (recur))
-        (println "You lose!!")))))
+        (JOptionPane/showMessageDialog frame "Game Over")))))
 
 ;; main
 (defn -main [& args]
